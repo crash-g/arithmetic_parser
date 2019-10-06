@@ -23,12 +23,39 @@ impl Operator {
         }
     }
 
+    fn execute_unary(&self, x: f64) -> f64 {
+        match self {
+            Operator::Plus => x,
+            Operator::Minus => -x,
+            Operator::Star => panic!("Not supported!"),
+            Operator::Slash => panic!("Not supported!"),
+        }
+    }
+
     fn execute_binary(&self, x: f64, y: f64) -> f64 {
         match self {
             Operator::Plus => x + y,
             Operator::Minus => x - y,
             Operator::Star => x * y,
             Operator::Slash => x / y,
+        }
+    }
+
+    fn is_unary(&self) -> bool {
+        match self {
+            Operator::Plus => true,
+            Operator::Minus => true,
+            Operator::Star => false,
+            Operator::Slash => false,
+        }
+    }
+
+    fn is_binary(&self) -> bool {
+        match self {
+            Operator::Plus => true,
+            Operator::Minus => true,
+            Operator::Star => true,
+            Operator::Slash => true,
         }
     }
 }
@@ -123,16 +150,18 @@ fn pop_operand(token_stack: &mut Vec<ParsedToken>) -> Option<Tree> {
     }
 }
 
-fn resolve_unary_operators(token_stack: &mut Vec<ParsedToken>) {
+fn resolve_unary_operators(token_stack: &mut Vec<ParsedToken>) -> Result<()> {
     let mut stack_length = token_stack.len();
-    assert!(stack_length >= 1);
-    assert!(token_stack[stack_length - 1].is_operand());
     while stack_length >= 2
+        && token_stack[stack_length - 1].is_operand()
         && token_stack[stack_length - 2].is_operator()
         && (stack_length == 2 || token_stack[stack_length - 3].is_operator())
     {
         let operand = pop_operand(token_stack).unwrap();
         let operator = pop_operator(token_stack).unwrap();
+        if !operator.is_unary() {
+            return Err(format!("Invalid non-unary operator found: {:?}", operator));
+        }
         let node = Tree::Node {
             node: operator,
             left_operand: None,
@@ -141,34 +170,42 @@ fn resolve_unary_operators(token_stack: &mut Vec<ParsedToken>) {
         token_stack.push(ParsedToken::Operand(node));
         stack_length = token_stack.len();
     }
+    Ok(())
 }
 
-fn resolve_binary_operators(token_stack: &mut Vec<ParsedToken>, minimum_priority: u8) {
+fn resolve_binary_operators(
+    token_stack: &mut Vec<ParsedToken>,
+    minimum_priority: u8,
+) -> Result<()> {
     let mut stack_length = token_stack.len();
-    assert!(stack_length >= 1);
-    assert!(token_stack[stack_length - 1].is_operand());
-    while stack_length >= 3 && token_stack[stack_length - 3].is_operand() &&
-        token_stack[stack_length - 2].is_operator() &&
-        token_stack[stack_length - 1].is_operand() {
-            match &token_stack[stack_length - 2] {
-                ParsedToken::Operator(operator) => {
-                    if operator.get_priority() < minimum_priority {
-                        break;
-                    }
-                },
-                _ => panic!()
+    while stack_length >= 3
+        && token_stack[stack_length - 3].is_operand()
+        && token_stack[stack_length - 2].is_operator()
+        && token_stack[stack_length - 1].is_operand()
+    {
+        match &token_stack[stack_length - 2] {
+            ParsedToken::Operator(operator) => {
+                if operator.get_priority() < minimum_priority {
+                    break;
+                }
             }
-            let right_operand = pop_operand(token_stack).unwrap();
-            let operator = pop_operator(token_stack).unwrap();
-            let left_operand = pop_operand(token_stack).unwrap();
-            let node = Tree::Node {
-                node: operator,
-                left_operand: Some(Box::new(left_operand)),
-                right_operand: Box::new(right_operand),
-            };
-            token_stack.push(ParsedToken::Operand(node));
-            stack_length = token_stack.len();
+            _ => panic!(),
         }
+        let right_operand = pop_operand(token_stack).unwrap();
+        let operator = pop_operator(token_stack).unwrap();
+        let left_operand = pop_operand(token_stack).unwrap();
+        if !operator.is_binary() {
+            return Err(format!("Invalid non-unary operator found: {:?}", operator));
+        }
+        let node = Tree::Node {
+            node: operator,
+            left_operand: Some(Box::new(left_operand)),
+            right_operand: Box::new(right_operand),
+        };
+        token_stack.push(ParsedToken::Operand(node));
+        stack_length = token_stack.len();
+    }
+    Ok(())
 }
 
 fn parse_tokens(tokens: &[&str]) -> Result<Tree> {
@@ -179,21 +216,20 @@ fn parse_tokens(tokens: &[&str]) -> Result<Tree> {
         match parsed_token {
             operand @ ParsedToken::Operand(_) => {
                 token_stack.push(operand);
-                resolve_unary_operators(&mut token_stack);
+                resolve_unary_operators(&mut token_stack)?;
             }
             ParsedToken::Operator(operator) => {
-                resolve_binary_operators(&mut token_stack, operator.get_priority());
+                resolve_binary_operators(&mut token_stack, operator.get_priority())?;
                 token_stack.push(ParsedToken::Operator(operator));
             }
         }
     }
-    resolve_binary_operators(&mut token_stack, 0);
-    assert!(token_stack.len() == 1);
-    let operand = token_stack.pop();
-    if let Some(ParsedToken::Operand(operand)) = operand {
-        Ok(operand)
+    resolve_binary_operators(&mut token_stack, 0)?;
+    if token_stack.len() == 1 {
+        Ok(pop_operand(&mut token_stack).unwrap())
     } else {
-        panic!();
+        // TODO deal with errors (adjacent operators, adjacent operands, starting or finishing operator)
+        panic!()
     }
 }
 
@@ -300,11 +336,14 @@ impl Tree {
                 right_operand,
             } => {
                 let left = match left_operand {
-                    Some(operand) => operand.execute(variables)?,
-                    None => unimplemented!(),
+                    Some(operand) => Some(operand.execute(variables)?),
+                    None => None,
                 };
                 let right = right_operand.execute(variables)?;
-                Ok(node.execute_binary(left, right))
+                match left {
+                    None => Ok(node.execute_unary(right)),
+                    Some(left) => Ok(node.execute_binary(left, right)),
+                }
             }
         }
     }
@@ -361,5 +400,12 @@ mod tests {
         let variables = [("xz", 4_f64), ("yy", 1_f64)].iter().cloned().collect();
         let result = parse_string(s).unwrap().execute(&variables).unwrap();
         assert_eq!(-9_f64, result);
+
+        let s = "-x";
+        let variables = [("x", 4_f64)].iter().cloned().collect();
+        assert_eq!(
+            -4_f64,
+            parse_string(s).unwrap().execute(&variables).unwrap()
+        );
     }
 }
