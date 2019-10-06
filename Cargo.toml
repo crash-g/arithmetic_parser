@@ -1,5 +1,5 @@
 [package]
-name = "arithmetic-parser"
+name = "arithmetic_parser"
 version = "0.1.0"
 authors = ["crash <crash@inventati.org>"]
 edition = "2018"
