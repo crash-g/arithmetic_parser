@@ -6,89 +6,278 @@ const OPEN_PARENTHESIS: &'static str = "(";
 const CLOSED_PARENTHESIS: &'static str = ")";
 
 #[derive(Debug)]
-enum Value {
-    Number(f64),
-    Placeholder(String),
+pub enum Operator {
+    Plus,
+    Minus,
+    Star,
+    Slash,
 }
 
-#[derive(Debug)]
-enum Operation {
-    Sum, Difference, Multiplication, Division,
-}
+impl Operator {
+    fn get_priority(&self) -> u8 {
+        match self {
+            Operator::Plus => 0,
+            Operator::Minus => 0,
+            Operator::Star => 1,
+            Operator::Slash => 1,
+        }
+    }
 
-impl Operation {
     fn execute_binary(&self, x: f64, y: f64) -> f64 {
         match self {
-            Operation::Sum => x + y,
-            Operation::Difference => x - y,
-            Operation::Multiplication => x * y,
-            Operation::Division => x / y,
+            Operator::Plus => x + y,
+            Operator::Minus => x - y,
+            Operator::Star => x * y,
+            Operator::Slash => x / y,
         }
     }
 }
 
 #[derive(Debug)]
-enum Tree {
-    Leaf(Value),
+pub enum Tree {
+    NumberLeaf(f64),
+    VariableLeaf(String),
     Node {
-        node: Operation,
+        node: Operator,
         left_operand: Option<Box<Tree>>,
-        right_operand: Option<Box<Tree>>,
+        right_operand: Box<Tree>,
     },
 }
 
 #[derive(Debug)]
 enum ParsedToken {
     Operand(Tree),
-    Operation(Operation),
+    Operator(Operator),
 }
 
-fn parse_string(s: &str) -> Result<Tree> {
-    // TODO deal with adjacent spaces and missing spaces
-    let tokens: Vec<_> = s.split(' ').collect();
+impl ParsedToken {
+    fn is_operand(&self) -> bool {
+        match self {
+            ParsedToken::Operand(_) => true,
+            _ => false,
+        }
+    }
+
+    fn is_operator(&self) -> bool {
+        match self {
+            ParsedToken::Operator(_) => true,
+            _ => false,
+        }
+    }
+}
+
+trait Peekable<T> {
+    fn peek(&self) -> Option<&T>;
+}
+
+impl<T> Peekable<T> for Vec<T> {
+    fn peek(&self) -> Option<&T> {
+        if !self.is_empty() {
+            Some(&self[self.len() - 1])
+        } else {
+            None
+        }
+    }
+}
+
+pub fn parse_string(s: &str) -> Result<Tree> {
+    // TODO improve parsing of tokens
+    let s = str::replace(s, OPEN_PARENTHESIS, " ( ");
+    let s = str::replace(&s, CLOSED_PARENTHESIS, " ) ");
+    let s = str::replace(&s, "+", " + ");
+    let s = str::replace(&s, "-", " - ");
+    let s = str::replace(&s, "*", " * ");
+    let s = str::replace(&s, "/", " / ");
+
+    let tokens: Vec<_> = s.split(' ').filter(|t| t != &"").collect();
     parse_tokens(&tokens)
+}
+
+fn process_stack(
+    token_stack: &mut Vec<ParsedToken>,
+    priority_stack: &mut Vec<u8>,
+    minimum_priority: u8,
+) -> Result<()> {
+    println!("token_stack: {:?}", token_stack);
+    while token_stack.len() >= 2 {
+        let stack_length = token_stack.len();
+        if stack_length == 2 || token_stack[stack_length - 3].is_operator() {
+            if let [ParsedToken::Operator(_), ParsedToken::Operand(_)] =
+                &token_stack[stack_length - 2..stack_length]
+            {
+                process_unary(token_stack, priority_stack)?;
+            }
+        } else if stack_length >= 3 {
+            if let [ParsedToken::Operand(_), ParsedToken::Operator(operator), ParsedToken::Operand(_)] =
+                &token_stack[stack_length - 3..stack_length]
+            {
+                if operator.get_priority() >= minimum_priority {
+                    process_binary(token_stack, priority_stack)?;
+                } else {
+                    break;
+                }
+            }
+        } else {
+            break;
+        }
+    }
+    Ok(())
+}
+
+fn process_unary(token_stack: &mut Vec<ParsedToken>, priority_stack: &mut Vec<u8>) -> Result<()> {
+    let stack_length = token_stack.len();
+    assert!(stack_length >= 2);
+    let maybe_operand = token_stack.pop().unwrap();
+    let maybe_operator = token_stack.pop().unwrap();
+    if let (ParsedToken::Operator(operator), ParsedToken::Operand(operand)) =
+        (maybe_operator, maybe_operand)
+    {
+        // TODO check that operator is a valid unary operator
+        let node = Tree::Node {
+            node: operator,
+            left_operand: None,
+            right_operand: Box::new(operand),
+        };
+        token_stack.push(ParsedToken::Operand(node));
+        priority_stack.pop();
+        Ok(())
+    } else {
+        panic!("This function assumes that the last two elements are Operator and Operand");
+    }
+}
+
+fn process_binary(token_stack: &mut Vec<ParsedToken>, priority_stack: &mut Vec<u8>) -> Result<()> {
+    let stack_length = token_stack.len();
+    assert!(stack_length >= 3);
+    let maybe_right_operand = token_stack.pop().unwrap();
+    let maybe_operator = token_stack.pop().unwrap();
+    let maybe_left_operand = token_stack.pop().unwrap();
+    if let (
+        ParsedToken::Operand(left_operand),
+        ParsedToken::Operator(operator),
+        ParsedToken::Operand(right_operand),
+    ) = (maybe_left_operand, maybe_operator, maybe_right_operand)
+    {
+        // TODO check that operator is a valid binary operator
+        let node = Tree::Node {
+            node: operator,
+            left_operand: Some(Box::new(left_operand)),
+            right_operand: Box::new(right_operand),
+        };
+        token_stack.push(ParsedToken::Operand(node));
+        priority_stack.pop();
+        Ok(())
+    } else {
+        panic!(
+            "This function assumes that the last three elements are Operand, Operator and Operand"
+        );
+    }
+}
+
+fn pop_operator(token_stack: &mut Vec<ParsedToken>) -> Option<Operator> {
+    let can_pop = match token_stack.peek() {
+        Some(ParsedToken::Operator(_)) => true,
+        _ => false,
+    };
+    if can_pop {
+        match token_stack.pop() {
+            Some(ParsedToken::Operator(operator)) => Some(operator),
+            _ => panic!("How could this happen!"),
+        }
+    } else {
+        None
+    }
+}
+
+fn pop_operand(token_stack: &mut Vec<ParsedToken>) -> Option<Tree> {
+    let can_pop = match token_stack.peek() {
+        Some(ParsedToken::Operand(_)) => true,
+        _ => false,
+    };
+    if can_pop {
+        match token_stack.pop() {
+            Some(ParsedToken::Operand(operand)) => Some(operand),
+            _ => panic!("How could this happen!"),
+        }
+    } else {
+        None
+    }
+}
+
+fn resolve_unary_operators(token_stack: &mut Vec<ParsedToken>) {
+    let mut stack_length = token_stack.len();
+    assert!(stack_length >= 1);
+    assert!(token_stack[stack_length - 1].is_operand());
+    while stack_length >= 2
+        && token_stack[stack_length - 2].is_operator()
+        && (stack_length == 2 || token_stack[stack_length - 3].is_operator())
+    {
+        let operand = pop_operand(token_stack).unwrap();
+        let operator = pop_operator(token_stack).unwrap();
+        let node = Tree::Node {
+            node: operator,
+            left_operand: None,
+            right_operand: Box::new(operand),
+        };
+        token_stack.push(ParsedToken::Operand(node));
+        stack_length = token_stack.len();
+    }
+}
+
+fn resolve_binary_operators(token_stack: &mut Vec<ParsedToken>, minimum_priority: u8) {
+    let mut stack_length = token_stack.len();
+    assert!(stack_length >= 1);
+    assert!(token_stack[stack_length - 1].is_operand());
+    while stack_length >= 3 && token_stack[stack_length - 3].is_operand() &&
+        token_stack[stack_length - 2].is_operator() &&
+        token_stack[stack_length - 1].is_operand() {
+            match &token_stack[stack_length - 2] {
+                ParsedToken::Operator(operator) => {
+                    if operator.get_priority() < minimum_priority {
+                        break;
+                    }
+                },
+                _ => panic!()
+            }
+            let right_operand = pop_operand(token_stack).unwrap();
+            let operator = pop_operator(token_stack).unwrap();
+            let left_operand = pop_operand(token_stack).unwrap();
+            let node = Tree::Node {
+                node: operator,
+                left_operand: Some(Box::new(left_operand)),
+                right_operand: Box::new(right_operand),
+            };
+            token_stack.push(ParsedToken::Operand(node));
+            stack_length = token_stack.len();
+        }
 }
 
 fn parse_tokens(tokens: &[&str]) -> Result<Tree> {
     let parsed_tokens = intermediate_parse(tokens)?;
 
-    let length = parsed_tokens.len();
-    if length == 0 {
-        return Err(format!("So empty around here! {:?}", parsed_tokens));
+    let mut token_stack = Vec::new();
+    for parsed_token in parsed_tokens {
+        println!("Processing {:?}", parsed_token);
+        match parsed_token {
+            operand @ ParsedToken::Operand(_) => {
+                token_stack.push(operand);
+                resolve_unary_operators(&mut token_stack);
+                // process_stack(&mut token_stack, &mut priority_stack, 100)?;
+            }
+            ParsedToken::Operator(operator) => {
+                resolve_binary_operators(&mut token_stack, operator.get_priority());
+                token_stack.push(ParsedToken::Operator(operator));
+            }
+        }
     }
-
-    let mut parsed_tokens = parsed_tokens.into_iter();
-
-    let mut result = match parsed_tokens.next().unwrap() {
-        ParsedToken::Operand(t) => t,
-        x => return Err(format!("Expected an operation here! {:?}", x))
-    };
-
-    loop {
-        let operation = match parsed_tokens.next() {
-            None => break,
-            Some(ParsedToken::Operation(o)) => o,
-            Some(x) => return Err(format!("Expected an operation here! {:?}", x))
-        };
-
-        let operand = match parsed_tokens.next() {
-            None => return Err(format!("Missing operand: {}", "?")),
-            Some(ParsedToken::Operand(t)) => t,
-            Some(x) => return Err(format!("Expected an operation here! {:?}", x))
-        };
-
-        result = Tree::Node{
-            node: operation,
-            left_operand: Some(Box::new(result)),
-            right_operand: Some(Box::new(operand))
-        };
+    resolve_binary_operators(&mut token_stack, 0);
+    assert!(token_stack.len() == 1);
+    let operand = token_stack.pop();
+    if let Some(ParsedToken::Operand(operand)) = operand {
+        Ok(operand)
+    } else {
+        panic!();
     }
-
-    Ok(result)
-
-    // TODO make implementation with priorities
-    // TODO deal with non binary operators (unary?)
-    // TODO deal with errors
 }
 
 fn intermediate_parse(tokens: &[&str]) -> Result<Vec<ParsedToken>> {
@@ -108,39 +297,54 @@ fn intermediate_parse(tokens: &[&str]) -> Result<Vec<ParsedToken>> {
 fn try_parse_next(tokens: &[&str], pos: usize) -> Result<(ParsedToken, usize)> {
     if tokens[pos] == OPEN_PARENTHESIS {
         let closing_parenthesis_pos = find_closing_parenthesis_pos(tokens, pos)?;
-        let operand = parse_tokens(&tokens[pos+1..closing_parenthesis_pos])?;
+        let operand = parse_tokens(&tokens[pos + 1..closing_parenthesis_pos])?;
         return Ok((ParsedToken::Operand(operand), closing_parenthesis_pos + 1));
     }
 
-    let operation = try_parse_operation(tokens[pos]);
-    if operation.is_some() {
-        return Ok((ParsedToken::Operation(operation.unwrap()), pos + 1));
+    let operator = try_parse_operator(tokens[pos]);
+    if operator.is_some() {
+        return Ok((ParsedToken::Operator(operator.unwrap()), pos + 1));
     }
 
-    let value = try_parse_value(tokens[pos]);
-    if value.is_some() {
-        return Ok((ParsedToken::Operand(Tree::Leaf(value.unwrap())), pos + 1));
+    let number = try_parse_number(tokens[pos]);
+    if number.is_some() {
+        return Ok((
+            ParsedToken::Operand(Tree::NumberLeaf(number.unwrap())),
+            pos + 1,
+        ));
+    }
+
+    let variable = try_parse_variable(tokens[pos]);
+    if variable.is_some() {
+        return Ok((
+            ParsedToken::Operand(Tree::VariableLeaf(variable.unwrap())),
+            pos + 1,
+        ));
     }
 
     Err(format!("Cannot parse token {}", tokens[pos]))
 }
 
-fn try_parse_value(token: &str) -> Option<Value> {
+fn try_parse_number(token: &str) -> Option<f64> {
     let number = token.parse::<f64>();
     if number.is_ok() {
-        Some(Value::Number(number.unwrap()))
+        Some(number.unwrap())
     } else {
-        Some(Value::Placeholder(token.to_string())) // TODO restrict variable names!
+        None
     }
 }
 
-fn try_parse_operation(token: &str) -> Option<Operation> {
+fn try_parse_variable(token: &str) -> Option<String> {
+    Some(token.to_string()) // TODO restrict variable names!
+}
+
+fn try_parse_operator(token: &str) -> Option<Operator> {
     match token {
-        "+" => Some(Operation::Sum),
-        "-" => Some(Operation::Difference),
-        "*" => Some(Operation::Multiplication),
-        "/" => Some(Operation::Division),
-        _ => None
+        "+" => Some(Operator::Plus),
+        "-" => Some(Operator::Minus),
+        "*" => Some(Operator::Star),
+        "/" => Some(Operator::Slash),
+        _ => None,
     }
 }
 
@@ -166,24 +370,23 @@ fn find_closing_parenthesis_pos(tokens: &[&str], pos: usize) -> Result<usize> {
 }
 
 impl Tree {
-    fn execute(&self, variables: &HashMap<&str, f64>) -> Result<f64> {
+    pub fn execute(&self, variables: &HashMap<&str, f64>) -> Result<f64> {
         match self {
-            Tree::Leaf(Value::Number(n)) => Ok(*n),
-            Tree::Leaf(Value::Placeholder(x)) => {
-                match variables.get(x.as_str()) {
-                    Some(n) => Ok(*n),
-                    None => Err(format!("Value for variable {} must be provided", x)),
-                }
+            Tree::NumberLeaf(n) => Ok(*n),
+            Tree::VariableLeaf(x) => match variables.get(x.as_str()) {
+                Some(n) => Ok(*n),
+                None => Err(format!("Value for variable {} must be provided", x)),
             },
-            Tree::Node{node, left_operand, right_operand} => {
+            Tree::Node {
+                node,
+                left_operand,
+                right_operand,
+            } => {
                 let left = match left_operand {
                     Some(operand) => operand.execute(variables)?,
                     None => unimplemented!(),
                 };
-                let right = match right_operand {
-                    Some(operand) => operand.execute(variables)?,
-                    None => unimplemented!(),
-                };
+                let right = right_operand.execute(variables)?;
                 Ok(node.execute_binary(left, right))
             }
         }
@@ -206,22 +409,40 @@ mod tests {
     #[test]
     fn test_execute() {
         let tokens = ["3"];
-        assert_eq!(3_f64, parse_tokens(&tokens).unwrap().execute(&HashMap::new()).unwrap());
+        assert_eq!(
+            3_f64,
+            parse_tokens(&tokens)
+                .unwrap()
+                .execute(&HashMap::new())
+                .unwrap()
+        );
 
         let tokens = ["x"];
         let variables = [("x", 4_f64)].iter().cloned().collect();
-        assert_eq!(4_f64, parse_tokens(&tokens).unwrap().execute(&variables).unwrap());
+        assert_eq!(
+            4_f64,
+            parse_tokens(&tokens).unwrap().execute(&variables).unwrap()
+        );
 
         let tokens = ["x", "+", "3"];
         let variables = [("x", 4_f64)].iter().cloned().collect();
-        assert_eq!(7_f64, parse_tokens(&tokens).unwrap().execute(&variables).unwrap());
+        assert_eq!(
+            7_f64,
+            parse_tokens(&tokens).unwrap().execute(&variables).unwrap()
+        );
 
-        let tokens = ["(", "x", "+", "3", ")", "*", "4", "+", "(", "4", "+", "y", ")"];
+        let tokens = [
+            "(", "x", "+", "3", ")", "*", "4", "+", "(", "4", "+", "y", ")",
+        ];
         let variables = [("x", 4_f64), ("y", 1_f64)].iter().cloned().collect();
-        assert_eq!(33_f64, parse_tokens(&tokens).unwrap().execute(&variables).unwrap());
+        assert_eq!(
+            33_f64,
+            parse_tokens(&tokens).unwrap().execute(&variables).unwrap()
+        );
 
-        let s = "3 + 4 * ( 2 + yy / ( 3 - xz ) * ( ( 2 ) ) )";
+        let s = "3 + 4 * (2 + yy / (3-xz) * ((5)))";
         let variables = [("xz", 4_f64), ("yy", 1_f64)].iter().cloned().collect();
-        assert_eq!(-42_f64, parse_string(s).unwrap().execute(&variables).unwrap());
+        let result = parse_string(s).unwrap().execute(&variables).unwrap();
+        assert_eq!(-9_f64, result);
     }
 }
