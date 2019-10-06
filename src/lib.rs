@@ -93,87 +93,6 @@ pub fn parse_string(s: &str) -> Result<Tree> {
     parse_tokens(&tokens)
 }
 
-fn process_stack(
-    token_stack: &mut Vec<ParsedToken>,
-    priority_stack: &mut Vec<u8>,
-    minimum_priority: u8,
-) -> Result<()> {
-    println!("token_stack: {:?}", token_stack);
-    while token_stack.len() >= 2 {
-        let stack_length = token_stack.len();
-        if stack_length == 2 || token_stack[stack_length - 3].is_operator() {
-            if let [ParsedToken::Operator(_), ParsedToken::Operand(_)] =
-                &token_stack[stack_length - 2..stack_length]
-            {
-                process_unary(token_stack, priority_stack)?;
-            }
-        } else if stack_length >= 3 {
-            if let [ParsedToken::Operand(_), ParsedToken::Operator(operator), ParsedToken::Operand(_)] =
-                &token_stack[stack_length - 3..stack_length]
-            {
-                if operator.get_priority() >= minimum_priority {
-                    process_binary(token_stack, priority_stack)?;
-                } else {
-                    break;
-                }
-            }
-        } else {
-            break;
-        }
-    }
-    Ok(())
-}
-
-fn process_unary(token_stack: &mut Vec<ParsedToken>, priority_stack: &mut Vec<u8>) -> Result<()> {
-    let stack_length = token_stack.len();
-    assert!(stack_length >= 2);
-    let maybe_operand = token_stack.pop().unwrap();
-    let maybe_operator = token_stack.pop().unwrap();
-    if let (ParsedToken::Operator(operator), ParsedToken::Operand(operand)) =
-        (maybe_operator, maybe_operand)
-    {
-        // TODO check that operator is a valid unary operator
-        let node = Tree::Node {
-            node: operator,
-            left_operand: None,
-            right_operand: Box::new(operand),
-        };
-        token_stack.push(ParsedToken::Operand(node));
-        priority_stack.pop();
-        Ok(())
-    } else {
-        panic!("This function assumes that the last two elements are Operator and Operand");
-    }
-}
-
-fn process_binary(token_stack: &mut Vec<ParsedToken>, priority_stack: &mut Vec<u8>) -> Result<()> {
-    let stack_length = token_stack.len();
-    assert!(stack_length >= 3);
-    let maybe_right_operand = token_stack.pop().unwrap();
-    let maybe_operator = token_stack.pop().unwrap();
-    let maybe_left_operand = token_stack.pop().unwrap();
-    if let (
-        ParsedToken::Operand(left_operand),
-        ParsedToken::Operator(operator),
-        ParsedToken::Operand(right_operand),
-    ) = (maybe_left_operand, maybe_operator, maybe_right_operand)
-    {
-        // TODO check that operator is a valid binary operator
-        let node = Tree::Node {
-            node: operator,
-            left_operand: Some(Box::new(left_operand)),
-            right_operand: Box::new(right_operand),
-        };
-        token_stack.push(ParsedToken::Operand(node));
-        priority_stack.pop();
-        Ok(())
-    } else {
-        panic!(
-            "This function assumes that the last three elements are Operand, Operator and Operand"
-        );
-    }
-}
-
 fn pop_operator(token_stack: &mut Vec<ParsedToken>) -> Option<Operator> {
     let can_pop = match token_stack.peek() {
         Some(ParsedToken::Operator(_)) => true,
@@ -257,12 +176,10 @@ fn parse_tokens(tokens: &[&str]) -> Result<Tree> {
 
     let mut token_stack = Vec::new();
     for parsed_token in parsed_tokens {
-        println!("Processing {:?}", parsed_token);
         match parsed_token {
             operand @ ParsedToken::Operand(_) => {
                 token_stack.push(operand);
                 resolve_unary_operators(&mut token_stack);
-                // process_stack(&mut token_stack, &mut priority_stack, 100)?;
             }
             ParsedToken::Operator(operator) => {
                 resolve_binary_operators(&mut token_stack, operator.get_priority());
