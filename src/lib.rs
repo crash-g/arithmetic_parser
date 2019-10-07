@@ -7,12 +7,21 @@ pub type Result<T> = std::result::Result<T, String>;
 
 const OPEN_PARENTHESIS: &'static str = "(";
 const CLOSED_PARENTHESIS: &'static str = ")";
+const COMMA: &'static str = ",";
 
 pub fn parse_string(s: &str) -> Result<Tree> {
     // TODO improve parsing of tokens
     let mut with_spaces = s.to_string();
-    with_spaces = str::replace(&with_spaces, OPEN_PARENTHESIS, " ( ");
-    with_spaces = str::replace(&with_spaces, CLOSED_PARENTHESIS, " ) ");
+    with_spaces = str::replace(
+        &with_spaces,
+        OPEN_PARENTHESIS,
+        &format!(" {} ", OPEN_PARENTHESIS),
+    );
+    with_spaces = str::replace(
+        &with_spaces,
+        CLOSED_PARENTHESIS,
+        &format!(" {} ", CLOSED_PARENTHESIS),
+    );
     for operator in Operator::get_all() {
         let operator = operator.as_str();
         with_spaces = str::replace(&with_spaces, operator, &format!(" {} ", operator));
@@ -111,43 +120,46 @@ fn preliminary_parse(tokens: &[&str]) -> Result<Vec<ParsedToken>> {
     let mut result = Vec::new();
 
     while current_pos < tokens_len {
-        let (parsed_token, end_pos) = try_parse_next(tokens, current_pos)?;
-        result.push(parsed_token);
-        current_pos = end_pos;
+        if tokens[current_pos] == OPEN_PARENTHESIS {
+            let closing_parenthesis_pos = find_closing_parenthesis_pos(tokens, current_pos)?;
+            let operands = tokens[current_pos + 1..closing_parenthesis_pos]
+                .split(|token| token == &COMMA)
+                .map(|subtokens| parse_tokens(subtokens));
+            for operand in operands {
+                if operand.is_ok() {
+                    result.push(ParsedToken::Operand(operand.unwrap()))
+                } else {
+                    return Err(operand.unwrap_err());
+                }
+            }
+            current_pos = closing_parenthesis_pos + 1;
+        } else {
+            let parsed_token = try_parse(tokens[current_pos])?;
+            result.push(parsed_token);
+            current_pos += 1;
+        }
     }
 
     Ok(result)
 }
 
-fn try_parse_next(tokens: &[&str], pos: usize) -> Result<(ParsedToken, usize)> {
-    if tokens[pos] == OPEN_PARENTHESIS {
-        let closing_parenthesis_pos = find_closing_parenthesis_pos(tokens, pos)?;
-        let operand = parse_tokens(&tokens[pos + 1..closing_parenthesis_pos])?;
-        return Ok((ParsedToken::Operand(operand), closing_parenthesis_pos + 1));
-    }
-
-    let operator = try_parse_operator(tokens[pos]);
+fn try_parse(token: &str) -> Result<ParsedToken> {
+    let operator = try_parse_operator(token);
     if operator.is_some() {
-        return Ok((ParsedToken::Operator(operator.unwrap()), pos + 1));
+        return Ok(ParsedToken::Operator(operator.unwrap()));
     }
 
-    let number = try_parse_number(tokens[pos]);
+    let number = try_parse_number(token);
     if number.is_some() {
-        return Ok((
-            ParsedToken::Operand(Tree::NumberLeaf(number.unwrap())),
-            pos + 1,
-        ));
+        return Ok(ParsedToken::Operand(Tree::NumberLeaf(number.unwrap())));
     }
 
-    let variable = try_parse_variable(tokens[pos]);
+    let variable = try_parse_variable(token);
     if variable.is_some() {
-        return Ok((
-            ParsedToken::Operand(Tree::VariableLeaf(variable.unwrap())),
-            pos + 1,
-        ));
+        return Ok(ParsedToken::Operand(Tree::VariableLeaf(variable.unwrap())));
     }
 
-    Err(format!("Cannot parse token {}", tokens[pos]))
+    Err(format!("Cannot parse token {}", token))
 }
 
 fn try_parse_number(token: &str) -> Option<f64> {
@@ -166,7 +178,7 @@ fn try_parse_variable(token: &str) -> Option<String> {
 fn try_parse_operator(token: &str) -> Option<Operator> {
     for operator in Operator::get_all() {
         if operator.as_str() == token {
-            return Some(operator)
+            return Some(operator);
         }
     }
     None
@@ -254,9 +266,6 @@ mod tests {
 
         let s = "3 * sqrt 4 - 2 * x";
         let variables = [("x", 3_f64)].iter().cloned().collect();
-        assert_eq!(
-            0_f64,
-            parse_string(s).unwrap().execute(&variables).unwrap()
-        );
+        assert_eq!(0_f64, parse_string(s).unwrap().execute(&variables).unwrap());
     }
 }

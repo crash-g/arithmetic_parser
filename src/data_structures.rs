@@ -13,7 +13,13 @@ pub enum Operator {
 impl Operator {
     pub fn get_all() -> Vec<Operator> {
         // TODO make it static array
-        vec![Operator::Plus, Operator::Minus, Operator::Star, Operator::Slash, Operator::Sqrt]
+        vec![
+            Operator::Plus,
+            Operator::Minus,
+            Operator::Star,
+            Operator::Slash,
+            Operator::Sqrt,
+        ]
     }
 
     pub fn get_priority(&self) -> u8 {
