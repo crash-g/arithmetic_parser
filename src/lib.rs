@@ -1,111 +1,12 @@
+mod data_structures;
+
+use data_structures::{pop_operand, pop_operator, Operator, ParsedToken, Tree};
 use std::collections::HashMap;
 
 pub type Result<T> = std::result::Result<T, String>;
 
 const OPEN_PARENTHESIS: &'static str = "(";
 const CLOSED_PARENTHESIS: &'static str = ")";
-
-#[derive(Debug)]
-pub enum Operator {
-    Plus,
-    Minus,
-    Star,
-    Slash,
-}
-
-impl Operator {
-    fn get_priority(&self) -> u8 {
-        match self {
-            Operator::Plus => 0,
-            Operator::Minus => 0,
-            Operator::Star => 1,
-            Operator::Slash => 1,
-        }
-    }
-
-    fn execute_unary(&self, x: f64) -> f64 {
-        match self {
-            Operator::Plus => x,
-            Operator::Minus => -x,
-            Operator::Star => panic!("Not supported!"),
-            Operator::Slash => panic!("Not supported!"),
-        }
-    }
-
-    fn execute_binary(&self, x: f64, y: f64) -> f64 {
-        match self {
-            Operator::Plus => x + y,
-            Operator::Minus => x - y,
-            Operator::Star => x * y,
-            Operator::Slash => x / y,
-        }
-    }
-
-    fn is_unary(&self) -> bool {
-        match self {
-            Operator::Plus => true,
-            Operator::Minus => true,
-            Operator::Star => false,
-            Operator::Slash => false,
-        }
-    }
-
-    fn is_binary(&self) -> bool {
-        match self {
-            Operator::Plus => true,
-            Operator::Minus => true,
-            Operator::Star => true,
-            Operator::Slash => true,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum Tree {
-    NumberLeaf(f64),
-    VariableLeaf(String),
-    Node {
-        node: Operator,
-        left_operand: Option<Box<Tree>>,
-        right_operand: Box<Tree>,
-    },
-}
-
-#[derive(Debug)]
-enum ParsedToken {
-    Operand(Tree),
-    Operator(Operator),
-}
-
-impl ParsedToken {
-    fn is_operand(&self) -> bool {
-        match self {
-            ParsedToken::Operand(_) => true,
-            _ => false,
-        }
-    }
-
-    fn is_operator(&self) -> bool {
-        match self {
-            ParsedToken::Operator(_) => true,
-            _ => false,
-        }
-    }
-}
-
-trait Peekable<T> {
-    fn peek(&self) -> Option<&T>;
-}
-
-impl<T> Peekable<T> for Vec<T> {
-    fn peek(&self) -> Option<&T> {
-        if !self.is_empty() {
-            Some(&self[self.len() - 1])
-        } else {
-            None
-        }
-    }
-}
 
 pub fn parse_string(s: &str) -> Result<Tree> {
     // TODO improve parsing of tokens
@@ -120,33 +21,28 @@ pub fn parse_string(s: &str) -> Result<Tree> {
     parse_tokens(&tokens)
 }
 
-fn pop_operator(token_stack: &mut Vec<ParsedToken>) -> Option<Operator> {
-    let can_pop = match token_stack.peek() {
-        Some(ParsedToken::Operator(_)) => true,
-        _ => false,
-    };
-    if can_pop {
-        match token_stack.pop() {
-            Some(ParsedToken::Operator(operator)) => Some(operator),
-            _ => panic!("How could this happen!"),
-        }
-    } else {
-        None
-    }
-}
+fn parse_tokens(tokens: &[&str]) -> Result<Tree> {
+    let parsed_tokens = preliminary_parse(tokens)?;
 
-fn pop_operand(token_stack: &mut Vec<ParsedToken>) -> Option<Tree> {
-    let can_pop = match token_stack.peek() {
-        Some(ParsedToken::Operand(_)) => true,
-        _ => false,
-    };
-    if can_pop {
-        match token_stack.pop() {
-            Some(ParsedToken::Operand(operand)) => Some(operand),
-            _ => panic!("How could this happen!"),
+    let mut token_stack = Vec::new();
+    for parsed_token in parsed_tokens {
+        match parsed_token {
+            operand @ ParsedToken::Operand(_) => {
+                token_stack.push(operand);
+                resolve_unary_operators(&mut token_stack)?;
+            }
+            ParsedToken::Operator(operator) => {
+                resolve_binary_operators(&mut token_stack, operator.get_priority())?;
+                token_stack.push(ParsedToken::Operator(operator));
+            }
         }
+    }
+    resolve_binary_operators(&mut token_stack, 0)?;
+    if token_stack.len() == 1 {
+        Ok(pop_operand(&mut token_stack).unwrap())
     } else {
-        None
+        // TODO deal with errors (adjacent operators, adjacent operands, starting or finishing operator)
+        panic!()
     }
 }
 
@@ -208,32 +104,7 @@ fn resolve_binary_operators(
     Ok(())
 }
 
-fn parse_tokens(tokens: &[&str]) -> Result<Tree> {
-    let parsed_tokens = intermediate_parse(tokens)?;
-
-    let mut token_stack = Vec::new();
-    for parsed_token in parsed_tokens {
-        match parsed_token {
-            operand @ ParsedToken::Operand(_) => {
-                token_stack.push(operand);
-                resolve_unary_operators(&mut token_stack)?;
-            }
-            ParsedToken::Operator(operator) => {
-                resolve_binary_operators(&mut token_stack, operator.get_priority())?;
-                token_stack.push(ParsedToken::Operator(operator));
-            }
-        }
-    }
-    resolve_binary_operators(&mut token_stack, 0)?;
-    if token_stack.len() == 1 {
-        Ok(pop_operand(&mut token_stack).unwrap())
-    } else {
-        // TODO deal with errors (adjacent operators, adjacent operands, starting or finishing operator)
-        panic!()
-    }
-}
-
-fn intermediate_parse(tokens: &[&str]) -> Result<Vec<ParsedToken>> {
+fn preliminary_parse(tokens: &[&str]) -> Result<Vec<ParsedToken>> {
     let tokens_len = tokens.len();
     let mut current_pos = 0;
     let mut result = Vec::new();
@@ -319,33 +190,6 @@ fn find_closing_parenthesis_pos(tokens: &[&str], pos: usize) -> Result<usize> {
         Ok(current_pos)
     } else {
         Err(format!("Parenthesis at pos {} is not balanced!", pos))
-    }
-}
-
-impl Tree {
-    pub fn execute(&self, variables: &HashMap<&str, f64>) -> Result<f64> {
-        match self {
-            Tree::NumberLeaf(n) => Ok(*n),
-            Tree::VariableLeaf(x) => match variables.get(x.as_str()) {
-                Some(n) => Ok(*n),
-                None => Err(format!("Value for variable {} must be provided", x)),
-            },
-            Tree::Node {
-                node,
-                left_operand,
-                right_operand,
-            } => {
-                let left = match left_operand {
-                    Some(operand) => Some(operand.execute(variables)?),
-                    None => None,
-                };
-                let right = right_operand.execute(variables)?;
-                match left {
-                    None => Ok(node.execute_unary(right)),
-                    Some(left) => Ok(node.execute_binary(left, right)),
-                }
-            }
-        }
     }
 }
 
