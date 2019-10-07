@@ -7,15 +7,22 @@ pub enum Operator {
     Minus,
     Star,
     Slash,
+    Sqrt,
 }
 
 impl Operator {
+    pub fn get_all() -> Vec<Operator> {
+        // TODO make it static array
+        vec![Operator::Plus, Operator::Minus, Operator::Star, Operator::Slash, Operator::Sqrt]
+    }
+
     pub fn get_priority(&self) -> u8 {
         match self {
             Operator::Plus => 0,
             Operator::Minus => 0,
             Operator::Star => 1,
             Operator::Slash => 1,
+            Operator::Sqrt => std::u8::MAX,
         }
     }
 
@@ -25,6 +32,7 @@ impl Operator {
             Operator::Minus => -x,
             Operator::Star => panic!("Not supported!"),
             Operator::Slash => panic!("Not supported!"),
+            Operator::Sqrt => x.sqrt(),
         }
     }
 
@@ -34,6 +42,7 @@ impl Operator {
             Operator::Minus => x - y,
             Operator::Star => x * y,
             Operator::Slash => x / y,
+            Operator::Sqrt => panic!("Not supported!"),
         }
     }
 
@@ -43,6 +52,7 @@ impl Operator {
             Operator::Minus => true,
             Operator::Star => false,
             Operator::Slash => false,
+            Operator::Sqrt => true,
         }
     }
 
@@ -52,6 +62,17 @@ impl Operator {
             Operator::Minus => true,
             Operator::Star => true,
             Operator::Slash => true,
+            Operator::Sqrt => false,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Operator::Plus => "+",
+            Operator::Minus => "-",
+            Operator::Star => "*",
+            Operator::Slash => "/",
+            Operator::Sqrt => "sqrt",
         }
     }
 }

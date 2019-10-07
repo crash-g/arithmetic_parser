@@ -10,14 +10,15 @@ const CLOSED_PARENTHESIS: &'static str = ")";
 
 pub fn parse_string(s: &str) -> Result<Tree> {
     // TODO improve parsing of tokens
-    let s = str::replace(s, OPEN_PARENTHESIS, " ( ");
-    let s = str::replace(&s, CLOSED_PARENTHESIS, " ) ");
-    let s = str::replace(&s, "+", " + ");
-    let s = str::replace(&s, "-", " - ");
-    let s = str::replace(&s, "*", " * ");
-    let s = str::replace(&s, "/", " / ");
+    let mut with_spaces = s.to_string();
+    with_spaces = str::replace(&with_spaces, OPEN_PARENTHESIS, " ( ");
+    with_spaces = str::replace(&with_spaces, CLOSED_PARENTHESIS, " ) ");
+    for operator in Operator::get_all() {
+        let operator = operator.as_str();
+        with_spaces = str::replace(&with_spaces, operator, &format!(" {} ", operator));
+    }
 
-    let tokens: Vec<_> = s.split(' ').filter(|t| t != &"").collect();
+    let tokens: Vec<_> = with_spaces.split(' ').filter(|t| t != &"").collect();
     parse_tokens(&tokens)
 }
 
@@ -163,13 +164,12 @@ fn try_parse_variable(token: &str) -> Option<String> {
 }
 
 fn try_parse_operator(token: &str) -> Option<Operator> {
-    match token {
-        "+" => Some(Operator::Plus),
-        "-" => Some(Operator::Minus),
-        "*" => Some(Operator::Star),
-        "/" => Some(Operator::Slash),
-        _ => None,
+    for operator in Operator::get_all() {
+        if operator.as_str() == token {
+            return Some(operator)
+        }
     }
+    None
 }
 
 fn find_closing_parenthesis_pos(tokens: &[&str], pos: usize) -> Result<usize> {
@@ -249,6 +249,13 @@ mod tests {
         let variables = [("x", 4_f64)].iter().cloned().collect();
         assert_eq!(
             -4_f64,
+            parse_string(s).unwrap().execute(&variables).unwrap()
+        );
+
+        let s = "3 * sqrt 4 - 2 * x";
+        let variables = [("x", 3_f64)].iter().cloned().collect();
+        assert_eq!(
+            0_f64,
             parse_string(s).unwrap().execute(&variables).unwrap()
         );
     }
