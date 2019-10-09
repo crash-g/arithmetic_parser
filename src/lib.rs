@@ -37,23 +37,53 @@ fn parse_tokens(tokens: &[&str]) -> Result<Tree> {
     let mut token_stack = Vec::new();
     for parsed_token in parsed_tokens {
         match parsed_token {
-            operand @ ParsedToken::Operand(_) => {
-                token_stack.push(operand);
-                resolve_unary_operators(&mut token_stack)?;
-            }
+            operand @ ParsedToken::Operand(_) => token_stack.push(operand),
             ParsedToken::Operator(operator) => {
-                resolve_binary_operators(&mut token_stack, operator.get_priority())?;
+                resolve_operators(&mut token_stack, operator.get_priority())?;
                 token_stack.push(ParsedToken::Operator(operator));
             }
         }
     }
-    resolve_binary_operators(&mut token_stack, 0)?;
+    resolve_operators(&mut token_stack, 0)?;
     if token_stack.len() == 1 {
         Ok(pop_operand(&mut token_stack).unwrap())
     } else {
         // TODO deal with errors (adjacent operators, adjacent operands, starting or finishing operator)
         panic!()
     }
+}
+
+fn resolve_operators(
+    token_stack: &mut Vec<ParsedToken>,
+    minimum_priority: u8,
+) -> Result<()> {
+    resolve_function_operators(&mut token_stack)?;
+    resolve_binary_operators(&mut token_stack, minimum_priority)?;
+    Ok(())
+}
+
+fn resolve_function_operators(token_stack: &mut Vec<ParsedToken>) -> Result<()> {
+    let pos = find_last_function_operator_pos(token_stack);
+    if pos.is_some() {
+        let (first, last) = token_stack.split_at_mut(pos.unwrap());
+        if last[0].is_nary() {
+            // TODO apply operator and add result to first
+        } else {
+            return Err("The number of arguments is not supported");
+        }
+    }
+    Ok(())
+}
+
+fn find_last_function_operator_pos(token_stack: &Vec<ParsedToken>) -> Option<usize> {
+    token_stack.iter().rposition(|token| token.is_operator())
+        .and_then(|last_operator_pos| {
+            if last_operator_pos == 0 || token_stack[last_operator_pos - 1].is_operator() {
+                Some(last_operator_pos)
+            } else {
+                None
+            }
+        })
 }
 
 fn resolve_unary_operators(token_stack: &mut Vec<ParsedToken>) -> Result<()> {

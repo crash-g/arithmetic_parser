@@ -42,6 +42,27 @@ impl Operator {
         }
     }
 
+    pub fn execute_function(&self, args: Vec<f64>) -> f64 {
+        match self {
+            Operator::Plus => args.iter().sum(),
+            Operator::Minus => {
+                match args.len() {
+                    1 => -args[0],
+                    2 => args[0] - args[1],
+                    _ => panic!("Not supported!"),
+                }
+            },
+            Operator::Star => panic!("Not supported!"), // TODO
+            Operator::Slash => panic!("Not supported!"), // TODO
+            Operator::Sqrt => {
+                match args.len() {
+                    1 => args[0].sqrt(),
+                    _ => panic!("Not supported!"),
+                }
+            },
+        }
+    }
+
     pub fn execute_binary(&self, x: f64, y: f64) -> f64 {
         match self {
             Operator::Plus => x + y,
@@ -59,6 +80,16 @@ impl Operator {
             Operator::Star => false,
             Operator::Slash => false,
             Operator::Sqrt => true,
+        }
+    }
+
+    pub fn is_nary(&self, n: usize) -> bool {
+        match self {
+            Operator::Plus => true,
+            Operator::Minus => n == 1 || n == 2,
+            Operator::Star => n == 2,
+            Operator::Slash => n == 2,
+            Operator::Sqrt => n == 1,
         }
     }
 
