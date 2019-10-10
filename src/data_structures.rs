@@ -32,74 +32,40 @@ impl Operator {
         }
     }
 
-    pub fn execute_unary(&self, x: f64) -> f64 {
-        match self {
-            Operator::Plus => x,
-            Operator::Minus => -x,
-            Operator::Star => panic!("Not supported!"),
-            Operator::Slash => panic!("Not supported!"),
-            Operator::Sqrt => x.sqrt(),
-        }
-    }
-
-    pub fn execute_function(&self, args: Vec<f64>) -> f64 {
+    pub fn execute(&self, args: Vec<f64>) -> f64 {
         match self {
             Operator::Plus => args.iter().sum(),
-            Operator::Minus => {
-                match args.len() {
-                    1 => -args[0],
-                    2 => args[0] - args[1],
-                    _ => panic!("Not supported!"),
-                }
+            Operator::Minus => match args.len() {
+                1 => -args[0],
+                2 => args[0] - args[1],
+                _ => panic!("Not supported!"),
             },
-            Operator::Star => panic!("Not supported!"), // TODO
-            Operator::Slash => panic!("Not supported!"), // TODO
-            Operator::Sqrt => {
-                match args.len() {
-                    1 => args[0].sqrt(),
-                    _ => panic!("Not supported!"),
-                }
+            Operator::Star => match args.len() {
+                2 => args[0] * args[1],
+                _ => panic!("Not supported!"),
             },
-        }
-    }
-
-    pub fn execute_binary(&self, x: f64, y: f64) -> f64 {
-        match self {
-            Operator::Plus => x + y,
-            Operator::Minus => x - y,
-            Operator::Star => x * y,
-            Operator::Slash => x / y,
-            Operator::Sqrt => panic!("Not supported!"),
-        }
-    }
-
-    pub fn is_unary(&self) -> bool {
-        match self {
-            Operator::Plus => true,
-            Operator::Minus => true,
-            Operator::Star => false,
-            Operator::Slash => false,
-            Operator::Sqrt => true,
+            Operator::Slash => match args.len() {
+                2 => args[0] / args[1],
+                _ => panic!("Not supported!"),
+            },
+            Operator::Sqrt => match args.len() {
+                1 => args[0].sqrt(),
+                _ => panic!("Not supported!"),
+            },
         }
     }
 
     pub fn is_nary(&self, n: usize) -> bool {
-        match self {
-            Operator::Plus => true,
-            Operator::Minus => n == 1 || n == 2,
-            Operator::Star => n == 2,
-            Operator::Slash => n == 2,
-            Operator::Sqrt => n == 1,
-        }
-    }
-
-    pub fn is_binary(&self) -> bool {
-        match self {
-            Operator::Plus => true,
-            Operator::Minus => true,
-            Operator::Star => true,
-            Operator::Slash => true,
-            Operator::Sqrt => false,
+        if n == 0 {
+            false
+        } else {
+            match self {
+                Operator::Plus => true,
+                Operator::Minus => n == 1 || n == 2,
+                Operator::Star => n == 2,
+                Operator::Slash => n == 2,
+                Operator::Sqrt => n == 1,
+            }
         }
     }
 
@@ -118,11 +84,7 @@ impl Operator {
 pub enum Tree {
     NumberLeaf(f64),
     VariableLeaf(String),
-    Node {
-        node: Operator,
-        left_operand: Option<Box<Tree>>,
-        right_operand: Box<Tree>,
-    },
+    Node { node: Operator, operands: Vec<Tree> },
 }
 
 impl Tree {
@@ -133,20 +95,12 @@ impl Tree {
                 Some(n) => Ok(*n),
                 None => Err(format!("Value for variable {} must be provided", x)),
             },
-            Tree::Node {
-                node,
-                left_operand,
-                right_operand,
-            } => {
-                let left = match left_operand {
-                    Some(operand) => Some(operand.execute(variables)?),
-                    None => None,
-                };
-                let right = right_operand.execute(variables)?;
-                match left {
-                    None => Ok(node.execute_unary(right)),
-                    Some(left) => Ok(node.execute_binary(left, right)),
+            Tree::Node { node, operands } => {
+                let mut resolved_operands = Vec::with_capacity(operands.len());
+                for operand in operands {
+                    resolved_operands.push(operand.execute(variables)?);
                 }
+                Ok(node.execute(resolved_operands))
             }
         }
     }
@@ -170,6 +124,13 @@ impl ParsedToken {
         match self {
             ParsedToken::Operator(_) => true,
             _ => false,
+        }
+    }
+
+    pub fn is_nary(&self, n: usize) -> bool {
+        match self {
+            ParsedToken::Operator(o) => o.is_nary(n),
+            _ => panic!("Only operators support this method!"),
         }
     }
 }
@@ -208,7 +169,7 @@ trait Peekable<T> {
     fn peek(&self) -> Option<&T>;
 }
 
-impl<T> Peekable<T> for Vec<T> {
+impl<T> Peekable<T> for [T] {
     fn peek(&self) -> Option<&T> {
         if !self.is_empty() {
             Some(&self[self.len() - 1])

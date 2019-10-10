@@ -22,6 +22,7 @@ pub fn parse_string(s: &str) -> Result<Tree> {
         CLOSED_PARENTHESIS,
         &format!(" {} ", CLOSED_PARENTHESIS),
     );
+    with_spaces = str::replace(&with_spaces, COMMA, &format!(" {} ", COMMA));
     for operator in Operator::get_all() {
         let operator = operator.as_str();
         with_spaces = str::replace(&with_spaces, operator, &format!(" {} ", operator));
@@ -53,30 +54,44 @@ fn parse_tokens(tokens: &[&str]) -> Result<Tree> {
     }
 }
 
-fn resolve_operators(
-    token_stack: &mut Vec<ParsedToken>,
-    minimum_priority: u8,
-) -> Result<()> {
-    resolve_function_operators(&mut token_stack)?;
-    resolve_binary_operators(&mut token_stack, minimum_priority)?;
+fn resolve_operators(token_stack: &mut Vec<ParsedToken>, minimum_priority: u8) -> Result<()> {
+    resolve_function_operators(token_stack)?;
+    resolve_infix_operators(token_stack, minimum_priority)?;
     Ok(())
 }
 
 fn resolve_function_operators(token_stack: &mut Vec<ParsedToken>) -> Result<()> {
     let pos = find_last_function_operator_pos(token_stack);
     if pos.is_some() {
-        let (first, last) = token_stack.split_at_mut(pos.unwrap());
-        if last[0].is_nary() {
-            // TODO apply operator and add result to first
-        } else {
-            return Err("The number of arguments is not supported");
+        let pos = pos.unwrap();
+        let num_operands = token_stack.len() - pos - 1;
+        if num_operands > 0 {
+            if token_stack[pos].is_nary(num_operands) {
+                let mut operands = Vec::with_capacity(num_operands);
+                operands.reverse();
+                for _ in 0..num_operands {
+                    operands.push(pop_operand(token_stack).unwrap());
+                }
+                let node = Tree::Node {
+                    node: pop_operator(token_stack).unwrap(),
+                    operands: operands,
+                };
+                token_stack.push(ParsedToken::Operand(node));
+            } else {
+                return Err(format!(
+                    "{:?} is not a function operator which accepts {} arguments",
+                    token_stack[pos], num_operands
+                ));
+            }
         }
     }
     Ok(())
 }
 
 fn find_last_function_operator_pos(token_stack: &Vec<ParsedToken>) -> Option<usize> {
-    token_stack.iter().rposition(|token| token.is_operator())
+    token_stack
+        .iter()
+        .rposition(|token| token.is_operator())
         .and_then(|last_operator_pos| {
             if last_operator_pos == 0 || token_stack[last_operator_pos - 1].is_operator() {
                 Some(last_operator_pos)
@@ -86,33 +101,7 @@ fn find_last_function_operator_pos(token_stack: &Vec<ParsedToken>) -> Option<usi
         })
 }
 
-fn resolve_unary_operators(token_stack: &mut Vec<ParsedToken>) -> Result<()> {
-    let mut stack_length = token_stack.len();
-    while stack_length >= 2
-        && token_stack[stack_length - 1].is_operand()
-        && token_stack[stack_length - 2].is_operator()
-        && (stack_length == 2 || token_stack[stack_length - 3].is_operator())
-    {
-        let operand = pop_operand(token_stack).unwrap();
-        let operator = pop_operator(token_stack).unwrap();
-        if !operator.is_unary() {
-            return Err(format!("Invalid non-unary operator found: {:?}", operator));
-        }
-        let node = Tree::Node {
-            node: operator,
-            left_operand: None,
-            right_operand: Box::new(operand),
-        };
-        token_stack.push(ParsedToken::Operand(node));
-        stack_length = token_stack.len();
-    }
-    Ok(())
-}
-
-fn resolve_binary_operators(
-    token_stack: &mut Vec<ParsedToken>,
-    minimum_priority: u8,
-) -> Result<()> {
+fn resolve_infix_operators(token_stack: &mut Vec<ParsedToken>, minimum_priority: u8) -> Result<()> {
     let mut stack_length = token_stack.len();
     while stack_length >= 3
         && token_stack[stack_length - 3].is_operand()
@@ -130,13 +119,12 @@ fn resolve_binary_operators(
         let right_operand = pop_operand(token_stack).unwrap();
         let operator = pop_operator(token_stack).unwrap();
         let left_operand = pop_operand(token_stack).unwrap();
-        if !operator.is_binary() {
-            return Err(format!("Invalid non-unary operator found: {:?}", operator));
+        if !operator.is_nary(2) {
+            return Err(format!("{:?} is not an infix operator", operator));
         }
         let node = Tree::Node {
             node: operator,
-            left_operand: Some(Box::new(left_operand)),
-            right_operand: Box::new(right_operand),
+            operands: vec![left_operand, right_operand],
         };
         token_stack.push(ParsedToken::Operand(node));
         stack_length = token_stack.len();
@@ -294,8 +282,15 @@ mod tests {
             parse_string(s).unwrap().execute(&variables).unwrap()
         );
 
-        let s = "3 * sqrt 4 - 2 * x";
+        let s = "3 * sqrt 4 - 2 * x + +(2,3)";
         let variables = [("x", 3_f64)].iter().cloned().collect();
-        assert_eq!(0_f64, parse_string(s).unwrap().execute(&variables).unwrap());
+        assert_eq!(5_f64, parse_string(s).unwrap().execute(&variables).unwrap());
+
+        let s = "* (3 + x*2, sqrt y - 1)";
+        let variables = [("x", 3_f64), ("y", 9_f64)].iter().cloned().collect();
+        assert_eq!(
+            18_f64,
+            parse_string(s).unwrap().execute(&variables).unwrap()
+        );
     }
 }
