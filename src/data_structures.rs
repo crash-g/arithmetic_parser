@@ -1,7 +1,7 @@
 use super::HashMap;
 use super::Result;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Operator {
     Plus,
     Minus,
@@ -10,16 +10,19 @@ pub enum Operator {
     Sqrt,
 }
 
+lazy_static! {
+    static ref OPERATORS: Vec<Operator> = vec![
+        Operator::Plus,
+        Operator::Minus,
+        Operator::Star,
+        Operator::Slash,
+        Operator::Sqrt,
+    ];
+}
+
 impl Operator {
-    pub fn get_all() -> Vec<Operator> {
-        // TODO make it static array
-        vec![
-            Operator::Plus,
-            Operator::Minus,
-            Operator::Star,
-            Operator::Slash,
-            Operator::Sqrt,
-        ]
+    pub fn get_all() -> &'static [Operator] {
+        &OPERATORS
     }
 
     pub fn get_priority(&self) -> u8 {
@@ -28,7 +31,7 @@ impl Operator {
             Operator::Minus => 0,
             Operator::Star => 1,
             Operator::Slash => 1,
-            Operator::Sqrt => std::u8::MAX,
+            Operator::Sqrt => 1,
         }
     }
 

@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate lazy_static;
+
 mod data_structures;
 
 use data_structures::{pop_operand, pop_operator, Operator, ParsedToken, Tree};
@@ -5,9 +8,9 @@ use std::collections::HashMap;
 
 pub type Result<T> = std::result::Result<T, String>;
 
-const OPEN_PARENTHESIS: &'static str = "(";
-const CLOSED_PARENTHESIS: &'static str = ")";
-const COMMA: &'static str = ",";
+const OPEN_PARENTHESIS: &str = "(";
+const CLOSED_PARENTHESIS: &str = ")";
+const COMMA: &str = ",";
 
 pub fn parse_string(s: &str) -> Result<Tree> {
     // TODO improve parsing of tokens
@@ -74,7 +77,7 @@ fn resolve_function_operators(token_stack: &mut Vec<ParsedToken>) -> Result<()> 
                 }
                 let node = Tree::Node {
                     node: pop_operator(token_stack).unwrap(),
-                    operands: operands,
+                    operands,
                 };
                 token_stack.push(ParsedToken::Operand(node));
             } else {
@@ -88,7 +91,7 @@ fn resolve_function_operators(token_stack: &mut Vec<ParsedToken>) -> Result<()> 
     Ok(())
 }
 
-fn find_last_function_operator_pos(token_stack: &Vec<ParsedToken>) -> Option<usize> {
+fn find_last_function_operator_pos(token_stack: &[ParsedToken]) -> Option<usize> {
     token_stack
         .iter()
         .rposition(|token| token.is_operator())
@@ -196,7 +199,7 @@ fn try_parse_variable(token: &str) -> Option<String> {
 fn try_parse_operator(token: &str) -> Option<Operator> {
     for operator in Operator::get_all() {
         if operator.as_str() == token {
-            return Some(operator);
+            return Some(operator.clone());
         }
     }
     None
@@ -291,6 +294,12 @@ mod tests {
         assert_eq!(
             18_f64,
             parse_string(s).unwrap().execute(&variables).unwrap()
+        );
+
+        let s = "3 + sqrt 4 * 2";
+        assert_eq!(
+            7_f64,
+            parse_string(s).unwrap().execute(&HashMap::new()).unwrap()
         );
     }
 }

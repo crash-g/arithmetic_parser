@@ -5,3 +5,4 @@ authors = ["crash <crash@inventati.org>"]
 edition = "2018"
 
 [dependencies]
+lazy_static = "1.4.0"
