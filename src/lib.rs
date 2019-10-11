@@ -3,7 +3,7 @@ extern crate lazy_static;
 
 mod data_structures;
 
-use data_structures::{pop_operand, pop_operator, Operator, ParsedToken, Tree};
+use data_structures::{pop_operand, pop_operator, ArithmeticExpression, Operator, ParsedToken};
 use std::collections::HashMap;
 
 pub type Result<T> = std::result::Result<T, String>;
@@ -12,7 +12,7 @@ const OPEN_PARENTHESIS: &str = "(";
 const CLOSED_PARENTHESIS: &str = ")";
 const COMMA: &str = ",";
 
-pub fn parse_string(s: &str) -> Result<Tree> {
+pub fn parse_string(s: &str) -> Result<ArithmeticExpression> {
     // TODO improve parsing of tokens
     let mut with_spaces = s.to_string();
     with_spaces = str::replace(
@@ -35,7 +35,7 @@ pub fn parse_string(s: &str) -> Result<Tree> {
     parse_tokens(&tokens)
 }
 
-fn parse_tokens(tokens: &[&str]) -> Result<Tree> {
+fn parse_tokens(tokens: &[&str]) -> Result<ArithmeticExpression> {
     let parsed_tokens = preliminary_parse(tokens)?;
 
     let mut token_stack = Vec::new();
@@ -75,7 +75,7 @@ fn resolve_function_operators(token_stack: &mut Vec<ParsedToken>) -> Result<()> 
                 for _ in 0..num_operands {
                     operands.push(pop_operand(token_stack).unwrap());
                 }
-                let node = Tree::Node {
+                let node = ArithmeticExpression::Node {
                     node: pop_operator(token_stack).unwrap(),
                     operands,
                 };
@@ -125,7 +125,7 @@ fn resolve_infix_operators(token_stack: &mut Vec<ParsedToken>, minimum_priority:
         if !operator.is_nary(2) {
             return Err(format!("{:?} is not an infix operator", operator));
         }
-        let node = Tree::Node {
+        let node = ArithmeticExpression::Node {
             node: operator,
             operands: vec![left_operand, right_operand],
         };
@@ -172,12 +172,16 @@ fn try_parse(token: &str) -> Result<ParsedToken> {
 
     let number = try_parse_number(token);
     if number.is_some() {
-        return Ok(ParsedToken::Operand(Tree::NumberLeaf(number.unwrap())));
+        return Ok(ParsedToken::Operand(ArithmeticExpression::NumberLeaf(
+            number.unwrap(),
+        )));
     }
 
     let variable = try_parse_variable(token);
     if variable.is_some() {
-        return Ok(ParsedToken::Operand(Tree::VariableLeaf(variable.unwrap())));
+        return Ok(ParsedToken::Operand(ArithmeticExpression::VariableLeaf(
+            variable.unwrap(),
+        )));
     }
 
     Err(format!("Cannot parse token {}", token))

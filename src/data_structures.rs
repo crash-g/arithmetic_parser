@@ -84,21 +84,24 @@ impl Operator {
 }
 
 #[derive(Debug)]
-pub enum Tree {
+pub enum ArithmeticExpression {
     NumberLeaf(f64),
     VariableLeaf(String),
-    Node { node: Operator, operands: Vec<Tree> },
+    Node {
+        node: Operator,
+        operands: Vec<ArithmeticExpression>,
+    },
 }
 
-impl Tree {
+impl ArithmeticExpression {
     pub fn execute(&self, variables: &HashMap<&str, f64>) -> Result<f64> {
         match self {
-            Tree::NumberLeaf(n) => Ok(*n),
-            Tree::VariableLeaf(x) => match variables.get(x.as_str()) {
+            ArithmeticExpression::NumberLeaf(n) => Ok(*n),
+            ArithmeticExpression::VariableLeaf(x) => match variables.get(x.as_str()) {
                 Some(n) => Ok(*n),
                 None => Err(format!("Value for variable {} must be provided", x)),
             },
-            Tree::Node { node, operands } => {
+            ArithmeticExpression::Node { node, operands } => {
                 let mut resolved_operands = Vec::with_capacity(operands.len());
                 for operand in operands {
                     resolved_operands.push(operand.execute(variables)?);
@@ -111,7 +114,7 @@ impl Tree {
 
 #[derive(Debug)]
 pub enum ParsedToken {
-    Operand(Tree),
+    Operand(ArithmeticExpression),
     Operator(Operator),
 }
 
@@ -153,7 +156,7 @@ pub fn pop_operator(token_stack: &mut Vec<ParsedToken>) -> Option<Operator> {
     }
 }
 
-pub fn pop_operand(token_stack: &mut Vec<ParsedToken>) -> Option<Tree> {
+pub fn pop_operand(token_stack: &mut Vec<ParsedToken>) -> Option<ArithmeticExpression> {
     let can_pop = match token_stack.peek() {
         Some(ParsedToken::Operand(_)) => true,
         _ => false,
