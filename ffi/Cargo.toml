@@ -1,0 +1,18 @@
+[package]
+name = "arithmetic_parser_wrap"
+version = "0.1.0"
+authors = ["crash <crash@inventati.org>"]
+edition = "2018"
+
+[dependencies]
+arithmetic_parser = { path = ".." }
+libc = "*"
+
+[profile.dev]
+panic = 'abort'
+
+[profile.release]
+panic = 'abort'
+
+[lib]
+crate-type = ["cdylib"]
