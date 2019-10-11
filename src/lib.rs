@@ -3,36 +3,57 @@ extern crate lazy_static;
 
 mod data_structures;
 
-use data_structures::{pop_operand, pop_operator, ArithmeticExpression, Operator, ParsedToken};
-use std::collections::HashMap;
+pub use data_structures::ArithmeticExpression;
 
 pub type Result<T> = std::result::Result<T, String>;
+
+use data_structures::{pop_operand, pop_operator, Operator, ParsedToken};
+use std::collections::HashMap;
 
 const OPEN_PARENTHESIS: &str = "(";
 const CLOSED_PARENTHESIS: &str = ")";
 const COMMA: &str = ",";
 
-pub fn parse_string(s: &str) -> Result<ArithmeticExpression> {
-    // TODO improve parsing of tokens
-    let mut with_spaces = s.to_string();
-    with_spaces = str::replace(
-        &with_spaces,
-        OPEN_PARENTHESIS,
-        &format!(" {} ", OPEN_PARENTHESIS),
-    );
-    with_spaces = str::replace(
-        &with_spaces,
-        CLOSED_PARENTHESIS,
-        &format!(" {} ", CLOSED_PARENTHESIS),
-    );
-    with_spaces = str::replace(&with_spaces, COMMA, &format!(" {} ", COMMA));
-    for operator in Operator::get_all() {
-        let operator = operator.as_str();
-        with_spaces = str::replace(&with_spaces, operator, &format!(" {} ", operator));
+impl ArithmeticExpression {
+    pub fn parse(s: &str) -> Result<ArithmeticExpression> {
+        // TODO improve parsing of tokens
+        let mut with_spaces = s.to_string();
+        with_spaces = str::replace(
+            &with_spaces,
+            OPEN_PARENTHESIS,
+            &format!(" {} ", OPEN_PARENTHESIS),
+        );
+        with_spaces = str::replace(
+            &with_spaces,
+            CLOSED_PARENTHESIS,
+            &format!(" {} ", CLOSED_PARENTHESIS),
+        );
+        with_spaces = str::replace(&with_spaces, COMMA, &format!(" {} ", COMMA));
+        for operator in Operator::get_all() {
+            let operator = operator.as_str();
+            with_spaces = str::replace(&with_spaces, operator, &format!(" {} ", operator));
+        }
+
+        let tokens: Vec<_> = with_spaces.split(' ').filter(|t| t != &"").collect();
+        parse_tokens(&tokens)
     }
 
-    let tokens: Vec<_> = with_spaces.split(' ').filter(|t| t != &"").collect();
-    parse_tokens(&tokens)
+    pub fn execute(&self, variables: &HashMap<&str, f64>) -> Result<f64> {
+        match self {
+            ArithmeticExpression::NumberLeaf(n) => Ok(*n),
+            ArithmeticExpression::VariableLeaf(x) => match variables.get(x.as_str()) {
+                Some(n) => Ok(*n),
+                None => Err(format!("Value for variable {} must be provided", x)),
+            },
+            ArithmeticExpression::Node { node, operands } => {
+                let mut resolved_operands = Vec::with_capacity(operands.len());
+                for operand in operands {
+                    resolved_operands.push(operand.execute(variables)?);
+                }
+                Ok(node.execute(resolved_operands))
+            }
+        }
+    }
 }
 
 fn parse_tokens(tokens: &[&str]) -> Result<ArithmeticExpression> {
@@ -279,31 +300,31 @@ mod tests {
 
         let s = "3 + 4 * (2 + yy / (3-xz) * ((5)))";
         let variables = [("xz", 4_f64), ("yy", 1_f64)].iter().cloned().collect();
-        let result = parse_string(s).unwrap().execute(&variables).unwrap();
+        let result = ArithmeticExpression::parse(s).unwrap().execute(&variables).unwrap();
         assert_eq!(-9_f64, result);
 
         let s = "-x";
         let variables = [("x", 4_f64)].iter().cloned().collect();
         assert_eq!(
             -4_f64,
-            parse_string(s).unwrap().execute(&variables).unwrap()
+            ArithmeticExpression::parse(s).unwrap().execute(&variables).unwrap()
         );
 
         let s = "3 * sqrt 4 - 2 * x + +(2,3)";
         let variables = [("x", 3_f64)].iter().cloned().collect();
-        assert_eq!(5_f64, parse_string(s).unwrap().execute(&variables).unwrap());
+        assert_eq!(5_f64, ArithmeticExpression::parse(s).unwrap().execute(&variables).unwrap());
 
         let s = "* (3 + x*2, sqrt y - 1)";
         let variables = [("x", 3_f64), ("y", 9_f64)].iter().cloned().collect();
         assert_eq!(
             18_f64,
-            parse_string(s).unwrap().execute(&variables).unwrap()
+            ArithmeticExpression::parse(s).unwrap().execute(&variables).unwrap()
         );
 
         let s = "3 + sqrt 4 * 2";
         assert_eq!(
             7_f64,
-            parse_string(s).unwrap().execute(&HashMap::new()).unwrap()
+            ArithmeticExpression::parse(s).unwrap().execute(&HashMap::new()).unwrap()
         );
     }
 }

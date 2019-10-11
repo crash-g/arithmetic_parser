@@ -1,5 +1,18 @@
-use super::HashMap;
-use super::Result;
+#[derive(Debug)]
+pub enum ArithmeticExpression {
+    NumberLeaf(f64),
+    VariableLeaf(String),
+    Node {
+        node: Operator,
+        operands: Vec<ArithmeticExpression>,
+    },
+}
+
+#[derive(Debug)]
+pub enum ParsedToken {
+    Operand(ArithmeticExpression),
+    Operator(Operator),
+}
 
 #[derive(Debug, Clone)]
 pub enum Operator {
@@ -81,41 +94,6 @@ impl Operator {
             Operator::Sqrt => "sqrt",
         }
     }
-}
-
-#[derive(Debug)]
-pub enum ArithmeticExpression {
-    NumberLeaf(f64),
-    VariableLeaf(String),
-    Node {
-        node: Operator,
-        operands: Vec<ArithmeticExpression>,
-    },
-}
-
-impl ArithmeticExpression {
-    pub fn execute(&self, variables: &HashMap<&str, f64>) -> Result<f64> {
-        match self {
-            ArithmeticExpression::NumberLeaf(n) => Ok(*n),
-            ArithmeticExpression::VariableLeaf(x) => match variables.get(x.as_str()) {
-                Some(n) => Ok(*n),
-                None => Err(format!("Value for variable {} must be provided", x)),
-            },
-            ArithmeticExpression::Node { node, operands } => {
-                let mut resolved_operands = Vec::with_capacity(operands.len());
-                for operand in operands {
-                    resolved_operands.push(operand.execute(variables)?);
-                }
-                Ok(node.execute(resolved_operands))
-            }
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum ParsedToken {
-    Operand(ArithmeticExpression),
-    Operator(Operator),
 }
 
 impl ParsedToken {
