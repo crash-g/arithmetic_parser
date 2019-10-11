@@ -1,5 +1,9 @@
+#![deny(rust_2018_idioms)]
+
 #[macro_use]
 extern crate lazy_static;
+
+use std::collections::HashMap;
 
 mod data_structures;
 
@@ -8,7 +12,6 @@ pub use data_structures::ArithmeticExpression;
 pub type Result<T> = std::result::Result<T, String>;
 
 use data_structures::{pop_operand, pop_operator, Operator, ParsedToken};
-use std::collections::HashMap;
 
 const OPEN_PARENTHESIS: &str = "(";
 const CLOSED_PARENTHESIS: &str = ")";
@@ -17,7 +20,7 @@ const COMMA: &str = ",";
 impl ArithmeticExpression {
     pub fn parse(s: &str) -> Result<ArithmeticExpression> {
         // TODO improve parsing of tokens
-        let mut with_spaces = s.to_string();
+        let mut with_spaces = s.trim().to_string();
         with_spaces = str::replace(
             &with_spaces,
             OPEN_PARENTHESIS,
