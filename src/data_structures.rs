@@ -48,7 +48,7 @@ impl Operator {
         }
     }
 
-    pub fn execute(&self, args: Vec<f64>) -> f64 {
+    pub fn apply(&self, args: Vec<f64>) -> f64 {
         match self {
             Operator::Plus => args.iter().sum(),
             Operator::Minus => match args.len() {

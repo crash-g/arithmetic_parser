@@ -1,3 +1,13 @@
+//! A simple parser and evaluator for arithmetic expressions.
+//!
+//! # Usage example
+//! ```
+//! use arithmetic_parser as parser;
+//! let expression = parser::ArithmeticExpression::parse("(x+y)/(x-y)").unwrap();
+//! let variables = [("x", 5_f64), ("y", 1_f64)].iter().cloned().collect();
+//! assert_eq!(1.5, expression.evaluate(&variables).unwrap());
+//! ```
+
 #![deny(rust_2018_idioms)]
 
 #[macro_use]
@@ -18,6 +28,30 @@ const CLOSED_PARENTHESIS: &str = ")";
 const COMMA: &str = ",";
 
 impl ArithmeticExpression {
+    /// Parse an arithmetic expression and return a tree representation.
+    ///
+    /// An arithmetic expression is made of *numbers*, *variables*,
+    /// *operators* and *special characters* (parenthesis and comma).
+    /// Operators can be *functional*
+    /// if their arguments follow them (e.g., `sqrt`), or *infix* if they are
+    /// placed between their arguments (e.g., `+`). Infix operators support
+    /// precedence.
+    ///
+    /// ## Caveats:
+    /// - Variable names must satisfy the following regex: `[a-zA-Z0-9]+`.
+    /// - Spaces can be omitted around parenthesis, commas, symbolic
+    ///   operators (`+`, `-`, `*`, `/`).
+    /// - Arguments for function operators must be surrounded by parenthesis
+    ///   and separated by commas. Parenthesis can be omitted if there is only
+    ///   one argument.
+    ///
+    /// ## Examples:
+    /// ```
+    /// use arithmetic_parser as parser;
+    /// parser::ArithmeticExpression::parse("3 + 2");
+    /// parser::ArithmeticExpression::parse("2 + x*4");
+    /// parser::ArithmeticExpression::parse("(1.34+sqrt x)*(2.2/(+(0.1,0.2,0.3)))");
+    /// ```
     pub fn parse(s: &str) -> Result<ArithmeticExpression> {
         // TODO improve parsing of tokens
         let mut with_spaces = s.trim().to_string();
@@ -41,7 +75,20 @@ impl ArithmeticExpression {
         parse_tokens(&tokens)
     }
 
-    pub fn execute(&self, variables: &HashMap<&str, f64>) -> Result<f64> {
+    /// Evaluate an arithmetic expression to produce a value.
+    ///
+    /// A HashMap with the values of all the variables must be provided. A
+    /// variable which is missing from the expression is ignored, but if
+    /// a variable is not present in the HashMap an error is returned.
+    ///
+    /// Example:
+    /// ```
+    /// use arithmetic_parser as parser;
+    /// let expression = parser::ArithmeticExpression::parse("(x+y)/(x-y)").unwrap();
+    /// let variables = [("x", 5_f64), ("y", 1_f64)].iter().cloned().collect();
+    /// assert_eq!(1.5, expression.evaluate(&variables).unwrap());
+    /// ```
+    pub fn evaluate(&self, variables: &HashMap<&str, f64>) -> Result<f64> {
         match self {
             ArithmeticExpression::NumberLeaf(n) => Ok(*n),
             ArithmeticExpression::VariableLeaf(x) => match variables.get(x.as_str()) {
@@ -51,9 +98,9 @@ impl ArithmeticExpression {
             ArithmeticExpression::Node { node, operands } => {
                 let mut resolved_operands = Vec::with_capacity(operands.len());
                 for operand in operands {
-                    resolved_operands.push(operand.execute(variables)?);
+                    resolved_operands.push(operand.evaluate(variables)?);
                 }
-                Ok(node.execute(resolved_operands))
+                Ok(node.apply(resolved_operands))
             }
         }
     }
@@ -268,13 +315,13 @@ mod tests {
     }
 
     #[test]
-    fn test_execute() {
+    fn test_evaluate() {
         let tokens = ["3"];
         assert_eq!(
             3_f64,
             parse_tokens(&tokens)
                 .unwrap()
-                .execute(&HashMap::new())
+                .evaluate(&HashMap::new())
                 .unwrap()
         );
 
@@ -282,14 +329,14 @@ mod tests {
         let variables = [("x", 4_f64)].iter().cloned().collect();
         assert_eq!(
             4_f64,
-            parse_tokens(&tokens).unwrap().execute(&variables).unwrap()
+            parse_tokens(&tokens).unwrap().evaluate(&variables).unwrap()
         );
 
         let tokens = ["x", "+", "3"];
         let variables = [("x", 4_f64)].iter().cloned().collect();
         assert_eq!(
             7_f64,
-            parse_tokens(&tokens).unwrap().execute(&variables).unwrap()
+            parse_tokens(&tokens).unwrap().evaluate(&variables).unwrap()
         );
 
         let tokens = [
@@ -298,36 +345,36 @@ mod tests {
         let variables = [("x", 4_f64), ("y", 1_f64)].iter().cloned().collect();
         assert_eq!(
             33_f64,
-            parse_tokens(&tokens).unwrap().execute(&variables).unwrap()
+            parse_tokens(&tokens).unwrap().evaluate(&variables).unwrap()
         );
 
         let s = "3 + 4 * (2 + yy / (3-xz) * ((5)))";
         let variables = [("xz", 4_f64), ("yy", 1_f64)].iter().cloned().collect();
-        let result = ArithmeticExpression::parse(s).unwrap().execute(&variables).unwrap();
+        let result = ArithmeticExpression::parse(s).unwrap().evaluate(&variables).unwrap();
         assert_eq!(-9_f64, result);
 
         let s = "-x";
         let variables = [("x", 4_f64)].iter().cloned().collect();
         assert_eq!(
             -4_f64,
-            ArithmeticExpression::parse(s).unwrap().execute(&variables).unwrap()
+            ArithmeticExpression::parse(s).unwrap().evaluate(&variables).unwrap()
         );
 
         let s = "3 * sqrt 4 - 2 * x + +(2,3)";
         let variables = [("x", 3_f64)].iter().cloned().collect();
-        assert_eq!(5_f64, ArithmeticExpression::parse(s).unwrap().execute(&variables).unwrap());
+        assert_eq!(5_f64, ArithmeticExpression::parse(s).unwrap().evaluate(&variables).unwrap());
 
         let s = "* (3 + x*2, sqrt y - 1)";
         let variables = [("x", 3_f64), ("y", 9_f64)].iter().cloned().collect();
         assert_eq!(
             18_f64,
-            ArithmeticExpression::parse(s).unwrap().execute(&variables).unwrap()
+            ArithmeticExpression::parse(s).unwrap().evaluate(&variables).unwrap()
         );
 
         let s = "3 + sqrt 4 * 2";
         assert_eq!(
             7_f64,
-            ArithmeticExpression::parse(s).unwrap().execute(&HashMap::new()).unwrap()
+            ArithmeticExpression::parse(s).unwrap().evaluate(&HashMap::new()).unwrap()
         );
     }
 }

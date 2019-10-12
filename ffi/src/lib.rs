@@ -24,13 +24,13 @@ impl Wrapper {
         self.variables.insert(variable, value);
     }
 
-    fn execute(&self) -> f64 {
+    fn evaluate(&self) -> f64 {
         let variables_ref = self
             .variables
             .iter()
             .map(|(x, y)| (x.as_ref(), *y))
             .collect();
-        self.expression.execute(&variables_ref).unwrap()
+        self.expression.evaluate(&variables_ref).unwrap()
     }
 }
 
@@ -65,13 +65,13 @@ pub extern "C" fn arithmetic_parser_add_variable(
 }
 
 #[no_mangle]
-pub extern "C" fn arithmetic_parser_execute(ptr: *mut Wrapper) -> c_double {
+pub extern "C" fn arithmetic_parser_evaluate(ptr: *mut Wrapper) -> c_double {
     let wrapper = unsafe {
         assert!(!ptr.is_null());
         &mut *ptr
     };
 
-    wrapper.execute()
+    wrapper.evaluate()
 }
 
 #[no_mangle]

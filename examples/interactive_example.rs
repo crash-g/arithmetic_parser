@@ -26,7 +26,7 @@ fn main() {
 
         match expression {
             Ok(e) => {
-                match e.execute(&variables) {
+                match e.evaluate(&variables) {
                     Ok(r) => println!("Result is: {}", r),
                     Err(e) => println!("Error: {}", e),
                 }
