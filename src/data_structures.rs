@@ -133,7 +133,7 @@ pub fn pop_operator(token_stack: &mut Vec<ParsedToken>) -> Option<Operator> {
     if can_pop {
         match token_stack.pop() {
             Some(ParsedToken::Operator(operator)) => Some(operator),
-            _ => panic!("How could this happen!"),
+            _ => panic!("Should not be possible!"),
         }
     } else {
         None
@@ -148,7 +148,7 @@ pub fn pop_operand(token_stack: &mut Vec<ParsedToken>) -> Option<ArithmeticExpre
     if can_pop {
         match token_stack.pop() {
             Some(ParsedToken::Operand(operand)) => Some(operand),
-            _ => panic!("How could this happen!"),
+            _ => panic!("Should not be possible!"),
         }
     } else {
         None

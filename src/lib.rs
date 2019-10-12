@@ -64,7 +64,7 @@ impl ArithmeticExpression {
                 let mut tokens = Vec::new();
                 let mut pos = 0;
                 let len = x.len();
-                while let Some(i) = find_restricted_character(x, pos, len) {
+                while let Some(i) = find_restricted_character_pos(x, pos, len) {
                     if pos != i {
                         tokens.push(&x[pos..i]);
                     }
@@ -112,7 +112,7 @@ impl ArithmeticExpression {
 }
 
 fn parse_tokens(tokens: &[&str]) -> Result<ArithmeticExpression> {
-    let parsed_tokens = preliminary_parse(tokens)?;
+    let parsed_tokens = intermediate_parse(tokens)?;
 
     let mut token_stack = Vec::new();
     for parsed_token in parsed_tokens {
@@ -125,11 +125,26 @@ fn parse_tokens(tokens: &[&str]) -> Result<ArithmeticExpression> {
         }
     }
     resolve_operators(&mut token_stack, 0)?;
-    if token_stack.len() == 1 {
-        Ok(pop_operand(&mut token_stack).unwrap())
-    } else {
-        // TODO deal with errors (adjacent operators, adjacent operands, starting or finishing operator)
-        panic!()
+    match token_stack.len() {
+        0 => Err("The expression was empty".to_string()),
+        1 => Ok(pop_operand(&mut token_stack).unwrap()),
+        _ => {
+            let len = token_stack.len();
+            if token_stack[len - 1].is_operator() {
+                return Err(format!("The expression terminates with an operator: {:?}",
+                                   pop_operator(&mut token_stack).unwrap()));
+            }
+            if let Some(pos) = find_adjacent_operators_pos(&token_stack) {
+                return Err(format!("Adjacent operators: {:?}, {:?}", token_stack[pos], token_stack[pos + 1]));
+            }
+
+            if let Some(pos) = find_adjacent_operands_pos(&token_stack) {
+                return Err(format!("Adjacent operands: {:?}, {:?}", token_stack[pos], token_stack[pos + 1]));
+            }
+
+            // TODO generic error: can it be made more precise?
+            Err(format!("Invalid expression. Attempt to parse tokens produced the following: {:?}", token_stack))
+        }
     }
 }
 
@@ -193,7 +208,7 @@ fn resolve_infix_operators(token_stack: &mut Vec<ParsedToken>, minimum_priority:
                     break;
                 }
             }
-            _ => panic!(),
+            _ => panic!("Should not be possible!"),
         }
         let right_operand = pop_operand(token_stack).unwrap();
         let operator = pop_operator(token_stack).unwrap();
@@ -211,7 +226,7 @@ fn resolve_infix_operators(token_stack: &mut Vec<ParsedToken>, minimum_priority:
     Ok(())
 }
 
-fn preliminary_parse(tokens: &[&str]) -> Result<Vec<ParsedToken>> {
+fn intermediate_parse(tokens: &[&str]) -> Result<Vec<ParsedToken>> {
     let tokens_len = tokens.len();
     let mut current_pos = 0;
     let mut result = Vec::new();
@@ -285,7 +300,7 @@ fn try_parse_operator(token: &str) -> Option<Operator> {
     None
 }
 
-fn find_restricted_character(s: &str, left: usize, right: usize) -> Option<usize> {
+fn find_restricted_character_pos(s: &str, left: usize, right: usize) -> Option<usize> {
     s[left..right]
         .find(|c| {
             c == OPEN_PARENTHESIS_CHAR
@@ -315,6 +330,30 @@ fn find_closing_parenthesis_pos(tokens: &[&str], pos: usize) -> Result<usize> {
     } else {
         Err(format!("Parenthesis at pos {} is not balanced!", pos))
     }
+}
+
+fn find_adjacent_operators_pos(token_stack: &[ParsedToken]) -> Option<usize> {
+    let len = token_stack.len();
+    let mut pos = 0;
+    while pos + 1 < len {
+        if token_stack[pos].is_operator() && token_stack[pos + 1].is_operator() {
+            return Some(pos);
+        }
+        pos += 1;
+    }
+    None
+}
+
+fn find_adjacent_operands_pos(token_stack: &[ParsedToken]) -> Option<usize> {
+    let len = token_stack.len();
+    let mut pos = 0;
+    while pos + 1 < len {
+        if token_stack[pos].is_operand() && token_stack[pos + 1].is_operand() {
+            return Some(pos);
+        }
+        pos += 1;
+    }
+    None
 }
 
 #[cfg(test)]

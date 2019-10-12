@@ -8,7 +8,14 @@ fn main() {
         println!("Enter expression. CTRL-C to quit.");
         let mut line = String::new();
         stdin.read_line(&mut line).unwrap();
-        let expression = parser::ArithmeticExpression::parse(&line);
+
+        let expression = match parser::ArithmeticExpression::parse(&line) {
+            Ok(e) => e,
+            Err(e) => {
+                println!("Error: {}", e);
+                continue;
+            }
+        };
 
         println!(
             "Now enter list of space separated variable values (e.g., x 2 y 1). CTRL-C to quit."
@@ -26,11 +33,8 @@ fn main() {
             i += 2;
         }
 
-        match expression {
-            Ok(e) => match e.evaluate(&variables) {
-                Ok(r) => println!("Result is: {}", r),
-                Err(e) => println!("Error: {}", e),
-            },
+        match expression.evaluate(&variables) {
+            Ok(r) => println!("Result is: {}", r),
             Err(e) => println!("Error: {}", e),
         }
     }
