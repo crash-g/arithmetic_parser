@@ -14,7 +14,7 @@ pub enum ParsedToken {
     Operator(Operator),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Operator {
     Plus,
     Minus,
@@ -23,7 +23,9 @@ pub enum Operator {
     Sqrt,
 }
 
+use std::collections::HashSet;
 lazy_static! {
+    static ref INFIX_OPERATORS: HashSet<char> = ['+', '-', '*', '/',].iter().cloned().collect();
     static ref OPERATORS: Vec<Operator> = vec![
         Operator::Plus,
         Operator::Minus,
@@ -34,6 +36,10 @@ lazy_static! {
 }
 
 impl Operator {
+    pub fn get_all_infix() -> &'static HashSet<char> {
+        &INFIX_OPERATORS
+    }
+
     pub fn get_all() -> &'static [Operator] {
         &OPERATORS
     }

@@ -10,7 +10,9 @@ fn main() {
         stdin.read_line(&mut line).unwrap();
         let expression = parser::ArithmeticExpression::parse(&line);
 
-        println!("Now enter list of space separated variable values (e.g., x 2 y 1). CTRL-C to quit.");
+        println!(
+            "Now enter list of space separated variable values (e.g., x 2 y 1). CTRL-C to quit."
+        );
         line.clear();
         stdin.read_line(&mut line).unwrap();
 
@@ -20,17 +22,15 @@ fn main() {
         assert!(tokens_len % 2 == 0);
         let mut i = 0;
         while i < tokens_len {
-            variables.insert(tokens[i], tokens[i+1].parse().unwrap());
+            variables.insert(tokens[i], tokens[i + 1].parse().unwrap());
             i += 2;
         }
 
         match expression {
-            Ok(e) => {
-                match e.evaluate(&variables) {
-                    Ok(r) => println!("Result is: {}", r),
-                    Err(e) => println!("Error: {}", e),
-                }
-            }
+            Ok(e) => match e.evaluate(&variables) {
+                Ok(r) => println!("Result is: {}", r),
+                Err(e) => println!("Error: {}", e),
+            },
             Err(e) => println!("Error: {}", e),
         }
     }

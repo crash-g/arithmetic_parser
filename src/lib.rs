@@ -27,6 +27,10 @@ const OPEN_PARENTHESIS: &str = "(";
 const CLOSED_PARENTHESIS: &str = ")";
 const COMMA: &str = ",";
 
+const OPEN_PARENTHESIS_CHAR: char = '(';
+const CLOSED_PARENTHESIS_CHAR: char = ')';
+const COMMA_CHAR: char = ',';
+
 impl ArithmeticExpression {
     /// Parse an arithmetic expression and return a tree representation.
     ///
@@ -53,25 +57,25 @@ impl ArithmeticExpression {
     /// parser::ArithmeticExpression::parse("(1.34+sqrt x)*(2.2/(+(0.1,0.2,0.3)))");
     /// ```
     pub fn parse(s: &str) -> Result<ArithmeticExpression> {
-        // TODO improve parsing of tokens
-        let mut with_spaces = s.trim().to_string();
-        with_spaces = str::replace(
-            &with_spaces,
-            OPEN_PARENTHESIS,
-            &format!(" {} ", OPEN_PARENTHESIS),
-        );
-        with_spaces = str::replace(
-            &with_spaces,
-            CLOSED_PARENTHESIS,
-            &format!(" {} ", CLOSED_PARENTHESIS),
-        );
-        with_spaces = str::replace(&with_spaces, COMMA, &format!(" {} ", COMMA));
-        for operator in Operator::get_all() {
-            let operator = operator.as_str();
-            with_spaces = str::replace(&with_spaces, operator, &format!(" {} ", operator));
-        }
-
-        let tokens: Vec<_> = with_spaces.split(' ').filter(|t| t != &"").collect();
+        let tokens: Vec<_> = s
+            .split_whitespace()
+            .flat_map(|x| {
+                let mut tokens = Vec::new();
+                let mut pos = 0;
+                let len = x.len();
+                while let Some(i) = find_restricted_character(x, pos, len) {
+                    if pos != i {
+                        tokens.push(&x[pos..i]);
+                    }
+                    tokens.push(&x[i..i + 1]);
+                    pos = i + 1;
+                }
+                if pos != len {
+                    tokens.push(&x[pos..len]);
+                }
+                tokens
+            })
+            .collect();
         parse_tokens(&tokens)
     }
 
@@ -280,6 +284,17 @@ fn try_parse_operator(token: &str) -> Option<Operator> {
     None
 }
 
+fn find_restricted_character(s: &str, left: usize, right: usize) -> Option<usize> {
+    s[left..right]
+        .find(|c| {
+            c == OPEN_PARENTHESIS_CHAR
+                || c == CLOSED_PARENTHESIS_CHAR
+                || c == COMMA_CHAR
+                || Operator::get_all_infix().contains(&c)
+        })
+        .map(|i| i + left)
+}
+
 fn find_closing_parenthesis_pos(tokens: &[&str], pos: usize) -> Result<usize> {
     let tokens_len = tokens.len();
     let mut current_pos = pos;
@@ -350,31 +365,49 @@ mod tests {
 
         let s = "3 + 4 * (2 + yy / (3-xz) * ((5)))";
         let variables = [("xz", 4_f64), ("yy", 1_f64)].iter().cloned().collect();
-        let result = ArithmeticExpression::parse(s).unwrap().evaluate(&variables).unwrap();
+        let result = ArithmeticExpression::parse(s)
+            .unwrap()
+            .evaluate(&variables)
+            .unwrap();
         assert_eq!(-9_f64, result);
 
         let s = "-x";
         let variables = [("x", 4_f64)].iter().cloned().collect();
         assert_eq!(
             -4_f64,
-            ArithmeticExpression::parse(s).unwrap().evaluate(&variables).unwrap()
+            ArithmeticExpression::parse(s)
+                .unwrap()
+                .evaluate(&variables)
+                .unwrap()
         );
 
         let s = "3 * sqrt 4 - 2 * x + +(2,3)";
         let variables = [("x", 3_f64)].iter().cloned().collect();
-        assert_eq!(5_f64, ArithmeticExpression::parse(s).unwrap().evaluate(&variables).unwrap());
+        assert_eq!(
+            5_f64,
+            ArithmeticExpression::parse(s)
+                .unwrap()
+                .evaluate(&variables)
+                .unwrap()
+        );
 
         let s = "* (3 + x*2, sqrt y - 1)";
         let variables = [("x", 3_f64), ("y", 9_f64)].iter().cloned().collect();
         assert_eq!(
             18_f64,
-            ArithmeticExpression::parse(s).unwrap().evaluate(&variables).unwrap()
+            ArithmeticExpression::parse(s)
+                .unwrap()
+                .evaluate(&variables)
+                .unwrap()
         );
 
         let s = "3 + sqrt 4 * 2";
         assert_eq!(
             7_f64,
-            ArithmeticExpression::parse(s).unwrap().evaluate(&HashMap::new()).unwrap()
+            ArithmeticExpression::parse(s)
+                .unwrap()
+                .evaluate(&HashMap::new())
+                .unwrap()
         );
     }
 }
