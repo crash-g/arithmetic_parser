@@ -42,9 +42,10 @@ impl ArithmeticExpression {
     /// precedence.
     ///
     /// ## Caveats:
-    /// - Variable names must satisfy the following regex: `[a-zA-Z0-9]+`.
     /// - Spaces can be omitted around parenthesis, commas, symbolic
     ///   operators (`+`, `-`, `*`, `/`).
+    /// - Variable names cannot contain spaces, parenthesis, commas, or symbolic
+    ///   operators.
     /// - Arguments for function operators must be surrounded by parenthesis
     ///   and separated by commas. Parenthesis can be omitted if there is only
     ///   one argument.
@@ -272,7 +273,7 @@ fn try_parse_number(token: &str) -> Option<f64> {
 }
 
 fn try_parse_variable(token: &str) -> Option<String> {
-    Some(token.to_string()) // TODO restrict variable names!
+    Some(token.to_string())
 }
 
 fn try_parse_operator(token: &str) -> Option<Operator> {
@@ -362,6 +363,14 @@ mod tests {
             33_f64,
             parse_tokens(&tokens).unwrap().evaluate(&variables).unwrap()
         );
+
+        let s = "àć / 4*ü";
+        let variables = [("àć", 4_f64), ("ü", 0.5)].iter().cloned().collect();
+        let result = ArithmeticExpression::parse(s)
+            .unwrap()
+            .evaluate(&variables)
+            .unwrap();
+        assert_eq!(0.5, result);
 
         let s = "3 + 4 * (2 + yy / (3-xz) * ((5)))";
         let variables = [("xz", 4_f64), ("yy", 1_f64)].iter().cloned().collect();
