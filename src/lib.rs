@@ -68,7 +68,7 @@ impl ArithmeticExpression {
                     if pos != i {
                         tokens.push(&x[pos..i]);
                     }
-                    tokens.push(&x[i..i + 1]);
+                    tokens.push(&x[i..=i]);
                     pos = i + 1;
                 }
                 if pos != len {
@@ -131,19 +131,32 @@ fn parse_tokens(tokens: &[&str]) -> Result<ArithmeticExpression> {
         _ => {
             let len = token_stack.len();
             if token_stack[len - 1].is_operator() {
-                return Err(format!("The expression terminates with an operator: {:?}",
-                                   pop_operator(&mut token_stack).unwrap()));
+                return Err(format!(
+                    "The expression terminates with an operator: {:?}",
+                    pop_operator(&mut token_stack).unwrap()
+                ));
             }
             if let Some(pos) = find_adjacent_operators_pos(&token_stack) {
-                return Err(format!("Adjacent operators: {:?}, {:?}", token_stack[pos], token_stack[pos + 1]));
+                return Err(format!(
+                    "Adjacent operators: {:?}, {:?}",
+                    token_stack[pos],
+                    token_stack[pos + 1]
+                ));
             }
 
             if let Some(pos) = find_adjacent_operands_pos(&token_stack) {
-                return Err(format!("Adjacent operands: {:?}, {:?}", token_stack[pos], token_stack[pos + 1]));
+                return Err(format!(
+                    "Adjacent operands: {:?}, {:?}",
+                    token_stack[pos],
+                    token_stack[pos + 1]
+                ));
             }
 
             // TODO generic error: can it be made more precise?
-            Err(format!("Invalid expression. Attempt to parse tokens produced the following: {:?}", token_stack))
+            Err(format!(
+                "Invalid expression. Attempt to parse tokens produced the following: {:?}",
+                token_stack
+            ))
         }
     }
 }
